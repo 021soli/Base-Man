@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta name="base:app_id" content="6a579d921d1438d1acdebc70" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ms. Base-Man 🎀 (Power Up Edition)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at center, #1e1b4b 0%, #0f172a 100%);
+            color: #ffffff;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        /* Active difficulty tab pulse */
+        .active-diff {
+            box-shadow: 0 0 20px #ec4899, inset 0 0 10px rgba(236, 72, 153, 0.5);
+            background-color: rgba(236, 72, 153, 0.2) !important;
+            color: #f472b6 !important;
+            border-color: #ec4899 !important;
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        /* Retro CRT Scanline Overlay Effect */
+        .arcade-cabinet {
+            position: relative;
+            box-shadow: 0 0 35px rgba(236, 72, 153, 0.35);
+        }
+        .arcade-cabinet::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.04));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+            z-index: 10;
+            border-radius: 12px;
+        }
+    </style>
+</meta name="base:app_id" content="6a579d921d1438d1acdebc70" />
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <!-- Web3 Header -->
+    <div class="w-full max-w-[480px] flex justify-between items-center mb-3 bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-slate-700/50 shadow-lg">
+        <span class="text-xs text-gray-400 font-mono flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-blue-500 animate-ping absolute opacity-75"></span>
+            <span class="w-3 h-3 rounded-full bg-blue-500 relative"></span> Base Network
+        </span>
+        <button id="connectBtn" onclick="connectWallet()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-4 rounded-lg text-xs transition-all shadow-md active:scale-95">
+            Connect Wallet
+        </button>
+    </div>
+
+    <h1 class="text-4xl font-black bg-gradient-to-r from-pink-400 via-fuchsia-500 to-indigo-400 bg-clip-text text-transparent mb-1 text-center tracking-wider drop-shadow-[0_2px_8px_rgba(236,72,153,0.3)]">Ms. Base-Man 🎀</h1>
+    <p class="text-[10px] text-gray-400 mb-4 tracking-widest uppercase">🔊 Tap control pad to enable Web Audio</p>
+
+    <!-- Difficulty Selector Tabs -->
+    <div class="flex gap-2 mb-4 w-full max-w-[480px]">
+        <button onclick="setDifficulty('easy')" id="diff-easy" class="flex-1 py-2 text-xs font-bold rounded-lg border border-pink-500/40 text-pink-300 bg-slate-900/50 hover:bg-pink-500/10 transition-all active:scale-95">
+            Easy (1 Ghost)
+        </button>
+        <button onclick="setDifficulty('medium')" id="diff-medium" class="flex-1 py-2 text-xs font-bold rounded-lg border border-pink-500/40 text-pink-300 bg-slate-900/50 hover:bg-pink-500/10 transition-all active:scale-95 active-diff">
+            Medium (2 Ghosts)
+        </button>
+        <button onclick="setDifficulty('hard')" id="diff-hard" class="flex-1 py-2 text-xs font-bold rounded-lg border border-pink-500/40 text-pink-300 bg-slate-900/50 hover:bg-pink-500/10 transition-all active:scale-95">
+            Hard (3 Ghosts)
+        </button>
+    </div>
+
+    <!-- Scoreboards -->
+    <div class="flex justify-between items-center w-full max-w-[480px] mb-3 px-1 text-xs text-gray-400 font-mono bg-slate-900/40 p-2.5 rounded-lg border border-slate-800/40">
+        <div>Score: <span id="score-val" class="text-yellow-400 font-black text-base">0</span></div>
+        <div class="flex items-center gap-0.5 text-base" id="lives-container">❤️❤️❤️</div>
+        <div class="flex items-center gap-1 text-indigo-400 font-bold" id="level-container">LVL <span id="level-num" class="text-white bg-indigo-600 px-1.5 py-0.5 rounded text-2xs">1</span></div>
+        <div id="frightened-box" class="text-cyan-400 font-bold hidden animate-pulse">🔵 WEAK GHOSTS!</div>
+        <div>High: <span id="high-val" class="text-pink-400 font-black text-base">0</span></div>
+    </div>
+
+    <!-- Game Screen Area -->
+    <div class="arcade-cabinet border-4 border-pink-500 rounded-2xl overflow-hidden shadow-2xl">
+        <canvas id="gameCanvas" width="480" height="384" class="bg-black block max-w-full h-auto cursor-crosshair"></canvas>
+        
+        <!-- Game Over / Win Overlay -->
+        <div id="overlay" class="absolute inset-0 bg-black/90 flex flex-col items-center justify-center hidden z-20">
+            <h2 id="overlay-text" class="text-4xl font-black mb-6 text-center text-pink-500 drop-shadow-[0_0_15px_rgba(23ec,72,153,0.8)]">GAME OVER</h2>
+            <button id="overlayBtn" onclick="handleOverlayAction()" class="bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white font-extrabold py-3.5 px-10 rounded-full shadow-lg transition-all transform hover:scale-105 active:scale-95 duration-200 flex items-center gap-2">
+                🔄 Play Again
+            </button>
+        </div>
+    </div>
+
+    <!-- Daily Transaction Button -->
+    <div class="mt-4 w-full max-w-[480px] flex flex-col items-center">
+        <button id="txBtn" onclick="sendDailyTransaction()" class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg flex items-center justify-center gap-2 transform active:scale-95">
+            📅 Execute Daily Transaction (+100 Score!)
+        </button>
+        <p id="txStatus" class="text-xs mt-2 text-gray-400 text-center font-mono h-4"></p>
+    </div>
+
+    <!-- Mobile Controls (D-Pad) -->
+    <div class="mt-5 flex flex-col items-center w-full max-w-[280px]">
+        <button onclick="changeDirection(0, -1)" class="w-14 h-14 bg-slate-800/80 backdrop-blur-sm hover:bg-slate-700 active:bg-pink-600 text-white font-bold rounded-2xl mb-2 flex items-center justify-center text-2xl shadow-lg border border-slate-700 active:border-pink-500 transition-all">▲</button>
+        <div class="flex gap-6 justify-between w-full">
+            <button onclick="changeDirection(-1, 0)" class="w-14 h-14 bg-slate-800/80 backdrop-blur-sm hover:bg-slate-700 active:bg-pink-600 text-white font-bold rounded-2xl flex items-center justify-center text-2xl shadow-lg border border-slate-700 active:border-pink-500 transition-all">◀</button>
+            <div class="w-14 h-14 flex items-center justify-center text-xs text-gray-500 font-bold tracking-widest font-mono">PAD</div>
+            <button onclick="changeDirection(1, 0)" class="w-14 h-14 bg-slate-800/80 backdrop-blur-sm hover:bg-slate-700 active:bg-pink-600 text-white font-bold rounded-2xl flex items-center justify-center text-2xl shadow-lg border border-slate-700 active:border-pink-500 transition-all">▶</button>
+        </div>
+        <button onclick="changeDirection(0, 1)" class="w-14 h-14 bg-slate-800/80 backdrop-blur-sm hover:bg-slate-700 active:bg-pink-600 text-white font-bold rounded-2xl mt-2 flex items-center justify-center text-2xl shadow-lg border border-slate-700 active:border-pink-500 transition-all">▼</button>
+    </div>
+
+    <div class="mt-4 text-center text-[10px] text-gray-500 leading-relaxed font-mono">
+        <p>👋 SWIPE/DRAG directly on game screen to move</p>
+        <p>⌨️ Keyboard Arrow Keys are supported</p>
+    </div>
+
+    <script>
+        // --- WEB3 WALLET & DAILY TRANSACTION LOGIC ---
+        let userAddress = null;
+
+        function checkDailyLimit() {
+            const lastTxDate = localStorage.getItem('lastDailyTxDate');
+            const today = new Date().toDateString();
+            
+            if (lastTxDate === today) {
+                const btn = document.getElementById('txBtn');
+                btn.innerText = "✅ Daily Transaction Completed Today";
+                btn.disabled = true;
+                btn.className = "w-full bg-slate-800 text-slate-500 font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider cursor-not-allowed shadow-inner border border-slate-700/30";
+                return true;
+            }
+            return false;
+        }
+
+        async function connectWallet() {
+            initAudio();
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    userAddress = accounts[0];
+                    
+                    const shortAddress = userAddress.substring(0, 6) + "..." + userAddress.substring(userAddress.length - 4);
+                    const connectBtn = document.getElementById('connectBtn');
+                    connectBtn.innerText = shortAddress;
+                    connectBtn.className = "bg-emerald-600 text-white font-bold py-1.5 px-4 rounded-lg text-xs cursor-default shadow-md shadow-emerald-950/40 border border-emerald-500";
+                    showStatus("Wallet Connected Successfully!", "text-emerald-400");
+                    checkDailyLimit();
+                } catch (error) {
+                    console.error(error);
+                    showStatus("Failed to connect wallet.", "text-red-400");
+                }
+            } else {
+                showStatus("Please open inside Coinbase Wallet / Base App!", "text-amber-400");
+            }
+        }
+
+        async function sendDailyTransaction() {
+            initAudio();
+            if (!userAddress) {
+                await connectWallet();
+                if (!userAddress) return;
+            }
+
+            if (checkDailyLimit()) return;
+
+            showStatus("Preparing transaction...", "text-blue-400");
+
+            try {
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x2105' }], 
+                    });
+                } catch (switchError) {
+                    if (switchError.code === 4902) {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: '0x2105',
+                                chainName: 'Base',
+                                nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                                rpcUrls: ['https://mainnet.base.org'],
+                                blockExplorerUrls: ['https://basescan.org']
+                            }]
+                        });
+                    } else {
+                        throw switchError;
+                    }
+                }
+
+                const txParams = {
+                    from: userAddress,
+                    to: userAddress, 
+                    value: '0x0',    
+                };
+
+                showStatus("Please confirm transaction in your wallet...", "text-amber-400");
+                const txHash = await window.ethereum.request({
+                    method: 'eth_sendTransaction',
+                    params: [txParams],
+                });
+
+                localStorage.setItem('lastDailyTxDate', new Date().toDateString());
+                
+                score += 100;
+                scoreVal.innerText = score;
+                saveHighScore();
+                
+                showStatus(`Daily TX Sent! +100 Score! Hash: ${txHash.substring(0, 10)}...`, "text-emerald-400");
+                checkDailyLimit();
+            } catch (error) {
+                console.error(error);
+                showStatus("Transaction failed or canceled.", "text-red-400");
+            }
+        }
+
+        function showStatus(msg, colorClass) {
+            const statusEl = document.getElementById('txStatus');
+            statusEl.innerText = msg;
+            statusEl.className = `text-xs mt-2 text-center font-mono ${colorClass}`;
+        }
+
+        window.addEventListener('load', () => {
+            checkDailyLimit();
+        });
+
+
+        // --- RETRO SOUND SYNTHESIZER ---
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        async function playSound(type) {
+            initAudio();
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+            
+            const now = audioCtx.currentTime;
+            
+            if (type === 'waka') {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(350, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.08);
+                gain.gain.setValueAtTime(0.04, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            } 
+            else if (type === 'power') {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(500, now);
+                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.2);
+                gain.gain.setValueAtTime(0.06, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } 
+            else if (type === 'eat_ghost') {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(250, now);
+                osc.frequency.linearRampToValueAtTime(1500, now + 0.35);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            } 
+            else if (type === 'death') {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.linearRampToValueAtTime(60, now + 0.6);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+                osc.start(now);
+                osc.stop(now + 0.6);
+            } 
+            else if (type === 'start') {
+                const notes = [261.63, 329.63, 392.00, 523.25];
+                notes.forEach((freq, i) => {
+                    let noteOsc = audioCtx.createOscillator();
+                    let noteGain = audioCtx.createGain();
+                    noteOsc.connect(noteGain);
+                    noteGain.connect(audioCtx.destination);
+                    noteOsc.type = 'square';
+                    noteOsc.frequency.setValueAtTime(freq, now + i * 0.12);
+                    noteGain.gain.setValueAtTime(0.03, now + i * 0.12);
+                    noteGain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.1);
+                    noteOsc.start(now + i * 0.12);
+                    noteOsc.stop(now + i * 0.12 + 0.1);
+                });
+            }
+        }
+
+
+        // --- SMOOTH PAC-MAN GAME LOGIC ---
+        const MAP = [
+          [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+          [1,3,2,2,2,2,2,1,2,2,2,2,2,3,1],
+          [1,2,1,1,2,1,2,1,2,1,2,1,1,2,1],
+          [1,2,1,1,2,1,2,2,2,1,2,1,1,2,1],
+          [1,2,2,2,2,2,2,1,2,2,2,2,2,2,1],
+          [1,1,1,2,1,1,2,1,2,1,1,2,1,1,1],
+          [0,0,1,2,1,2,2,2,2,2,1,2,1,0,0], 
+          [1,1,1,2,1,2,1,1,1,2,1,2,1,1,1],
+          [1,2,2,2,2,2,2,1,2,2,2,2,2,2,1],
+          [1,2,1,1,2,1,2,1,2,1,2,1,1,2,1],
+          [1,3,2,1,2,2,2,2,2,2,2,1,2,3,1],
+          [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+        
+        const TILE_SIZE = 32;
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreVal = document.getElementById('score-val');
+        const highVal = document.getElementById('high-val');
+        const overlay = document.getElementById('overlay');
+        const overlayText = document.getElementById('overlay-text');
+        const overlayBtn = document.getElementById('overlayBtn');
+        const frightenedBox = document.getElementById('frightened-box');
+
+        let score = 0;
+        let highScore = localStorage.getItem('msbaseman_highscore') || 0;
+        highVal.innerText = highScore;
+
+        let lives = 3;
+        let level = 1;
+        let gameOver = false;
+        let gameWon = false;
+        let gameTick = 0;
+        let animationFrameId;
+
+        // Using precise float values for smooth animations, snapped using discrete grids
+        let pacman = { 
+            x: 7, y: 8, 
+            gridX: 7, gridY: 8, 
+            dirX: 0, dirY: 0, 
+            nextDirX: 0, nextDirY: 0, 
+            angle: 0 
+        };
+        
+        let ghosts = [];
+        let difficulty = 'medium';
+        let frightenedTimer = 0;
+
+        const GHOST_COLORS = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB851'];
+
+        function initGhosts() {
+            ghosts = [];
+            let count = 1;
+            if (difficulty === 'medium') count = 2;
+            if (difficulty === 'hard') count = 3;
+
+            for (let i = 0; i < count; i++) {
+                ghosts.push({
+                    id: i,
+                    x: 7, y: 6,
+                    gridX: 7, gridY: 6,
+                    dirX: i % 2 === 0 ? 1 : -1, dirY: 0,
+                    color: GHOST_COLORS[i % GHOST_COLORS.length]
+                });
+            }
+        }
+
+        let dots = JSON.parse(JSON.stringify(MAP));
+
+        function setDifficulty(level) {
+            initAudio();
+            difficulty = level;
+            ['easy', 'medium', 'hard'].forEach(l => {
+                const btn = document.getElementById(`diff-${l}`);
+                if (l === level) {
+                    btn.classList.add('active-diff');
+                } else {
+                    btn.classList.remove('active-diff');
+                }
+            });
+            restartGame(true);
+        }
+
+        function changeDirection(dx, dy) {
+            initAudio();
+            pacman.nextDirX = dx;
+            pacman.nextDirY = dy;
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+            if (e.key === 'ArrowUp') changeDirection(0, -1);
+            if (e.key === 'ArrowDown') changeDirection(0, 1);
+            if (e.key === 'ArrowLeft') changeDirection(-1, 0);
+            if (e.key === 'ArrowRight') changeDirection(1, 0);
+        });
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        canvas.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            e.preventDefault();
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            let diffX = e.changedTouches[0].clientX - touchStartX;
+            let diffY = e.changedTouches[0].clientY - touchStartY;
+            const threshold = 25;
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                if (Math.abs(diffX) > threshold) changeDirection(diffX > 0 ? 1 : -1, 0);
+            } else {
+                if (Math.abs(diffY) > threshold) changeDirection(0, diffY > 0 ? 1 : -1);
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        function canMove(x, y) {
+            if (x < 0 || x >= MAP[0].length) return y === 6;
+            if (y < 0 || y >= MAP.length) return false;
+            return MAP[y][x] !== 1;
+        }
+
+        function saveHighScore() {
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('msbaseman_highscore', highScore);
+                highVal.innerText = highScore;
+            }
+        }
+
+        function updateLivesDisplay() {
+            const livesEl = document.getElementById('lives-container');
+            livesEl.innerHTML = '❤️'.repeat(Math.max(0, lives));
+        }
+
+        function updateLevelDisplay() {
+            const levelNum = document.getElementById('level-num');
+            if (levelNum) levelNum.textContent = level;
+        }
+
+        function updateGame() {
+            if (gameOver || gameWon) return;
+            gameTick++;
+
+            if (frightenedTimer > 0) {
+                frightenedTimer--;
+                frightenedBox.classList.remove('hidden');
+                if (frightenedTimer === 0) frightenedBox.classList.add('hidden');
+            }
+
+            // --- SMOOTH PAC-MAN MOVEMENT ---
+            const pacSpeed = 0.125; // Snaps grid nicely (1 / 8 frames)
+            let pacArrived = Math.abs(pacman.x - pacman.gridX) < 0.01 && Math.abs(pacman.y - pacman.gridY) < 0.01;
+
+            if (pacArrived) {
+                pacman.x = pacman.gridX;
+                pacman.y = pacman.gridY;
+
+                // Try to execute queued direction
+                if (canMove(pacman.gridX + pacman.nextDirX, pacman.gridY + pacman.nextDirY)) {
+                    pacman.dirX = pacman.nextDirX;
+                    pacman.dirY = pacman.nextDirY;
+                    
+                    // Update graphic rotation angle based on movement direction
+                    if (pacman.dirX === 1) pacman.angle = 0;
+                    if (pacman.dirX === -1) pacman.angle = Math.PI;
+                    if (pacman.dirY === 1) pacman.angle = 0.5 * Math.PI;
+                    if (pacman.dirY === -1) pacman.angle = 1.5 * Math.PI;
+                }
+
+                // If path is clear, set next destination
+                if (canMove(pacman.gridX + pacman.dirX, pacman.gridY + pacman.dirY)) {
+                    pacman.gridX += pacman.dirX;
+                    pacman.gridY += pacman.dirY;
+                } else {
+                    pacman.dirX = 0;
+                    pacman.dirY = 0;
+                }
+            } else {
+                pacman.x += pacman.dirX * pacSpeed;
+                pacman.y += pacman.dirY * pacSpeed;
+
+                // Seamless Screen Wrap-around 
+                if (pacman.dirX > 0 && pacman.x >= MAP[0].length) {
+                    pacman.x = 0;
+                    pacman.gridX = 0;
+                } else if (pacman.dirX < 0 && pacman.x < 0) {
+                    pacman.x = MAP[0].length - 1;
+                    pacman.gridX = MAP[0].length - 1;
+                }
+            }
+
+            // Eating Dots logic snapped to grids
+            let currentGridX = Math.round(pacman.x);
+            let currentGridY = Math.round(pacman.y);
+
+            if (currentGridX >= 0 && currentGridX < MAP[0].length && currentGridY >= 0 && currentGridY < MAP.length) {
+                if (dots[currentGridY][currentGridX] === 2) {
+                    dots[currentGridY][currentGridX] = 0;
+                    score += 10;
+                    scoreVal.innerText = score;
+                    saveHighScore();
+                    playSound('waka');
+                } else if (dots[currentGridY][currentGridX] === 3) {
+                    dots[currentGridY][currentGridX] = 0;
+                    score += 50;
+                    scoreVal.innerText = score;
+                    saveHighScore();
+                    frightenedTimer = 300; // 5 seconds at 60 FPS
+                    playSound('power');
+                }
+            }
+
+            // Check Win condition
+            let hasDots = false;
+            for (let r = 0; r < dots.length; r++) {
+                if (dots[r].includes(2) || dots[r].includes(3)) {
+                    hasDots = true;
+                    break;
+                }
+            }
+            if (!hasDots) {
+                gameWon = true;
+                level++;
+                updateLevelDisplay();
+                overlayText.innerText = `🎉 STAGE CLEAR! LVL ${level}`;
+                overlayBtn.innerText = "➡️ Next Level";
+                overlay.classList.remove('hidden');
+                return;
+            }
+
+            // --- SMOOTH GHOSTS MOVEMENT ---
+            let ghostSpeed = frightenedTimer > 0 ? 0.05 : (difficulty === 'easy' ? 0.05 : (difficulty === 'medium' ? 0.1 : 0.125));
+
+            ghosts.forEach((ghost) => {
+                let ghostArrived = Math.abs(ghost.x - ghost.gridX) < 0.01 && Math.abs(ghost.y - ghost.gridY) < 0.01;
+
+                if (ghostArrived) {
+                    ghost.x = ghost.gridX;
+                    ghost.y = ghost.gridY;
+
+                    const directions = [{x: 0, y: -1}, {x: 0, y: 1}, {x: -1, y: 0}, {x: 1, y: 0}];
+                    let validDirs = directions.filter(d => canMove(ghost.gridX + d.x, ghost.gridY + d.y) && !(d.x === -ghost.dirX && d.y === -ghost.dirY));
+                    
+                    if (validDirs.length === 0) {
+                        validDirs = directions.filter(d => canMove(ghost.gridX + d.x, ghost.gridY + d.y));
+                    }
+
+                    if (validDirs.length > 0) {
+                        let chosen = validDirs[0];
+
+                        if (frightenedTimer > 0) {
+                            let maxDist = -1;
+                            validDirs.forEach(d => {
+                                let nextX = ghost.gridX + d.x;
+                                let nextY = ghost.gridY + d.y;
+                                let dist = Math.abs(nextX - pacman.x) + Math.abs(nextY - pacman.y);
+                                if (dist > maxDist) {
+                                    maxDist = dist;
+                                    chosen = d;
+                                }
+                            });
+                        } else if (difficulty === 'hard' && Math.random() < 0.5) {
+                            let minDist = Infinity;
+                            validDirs.forEach(d => {
+                                let nextX = ghost.gridX + d.x;
+                                let nextY = ghost.gridY + d.y;
+                                let dist = Math.abs(nextX - pacman.x) + Math.abs(nextY - pacman.y);
+                                if (dist < minDist) {
+                                    minDist = dist;
+                                    chosen = d;
+                                }
+                            });
+                        } else {
+                            chosen = validDirs[Math.floor(Math.random() * validDirs.length)];
+                        }
+
+                        ghost.dirX = chosen.x;
+                        ghost.dirY = chosen.y;
+                    }
+
+                    ghost.gridX += ghost.dirX;
+                    ghost.gridY += ghost.dirY;
+                } else {
+                    ghost.x += ghost.dirX * ghostSpeed;
+                    ghost.y += ghost.dirY * ghostSpeed;
+
+                    if (ghost.dirX > 0 && ghost.x >= MAP[0].length) {
+                        ghost.x = 0;
+                        ghost.gridX = 0;
+                    } else if (ghost.dirX < 0 && ghost.x < 0) {
+                        ghost.x = MAP[0].length - 1;
+                        ghost.gridX = MAP[0].length - 1;
+                    }
+                }
+            });
+
+            // Handle Overlap Collisions smoothly
+            ghosts.forEach((ghost) => {
+                let dist = Math.hypot(pacman.x - ghost.x, pacman.y - ghost.y);
+                if (dist < 0.7) { 
+                    if (frightenedTimer > 0) {
+                        playSound('eat_ghost');
+                        ghost.x = 7;
+                        ghost.y = 6;
+                        ghost.gridX = 7;
+                        ghost.gridY = 6;
+                        ghost.dirX = 0;
+                        ghost.dirY = -1;
+                        score += 200;
+                        scoreVal.innerText = score;
+                        saveHighScore();
+                    } else {
+                        playSound('death');
+                        lives--;
+                        updateLivesDisplay();
+                        if (lives <= 0) {
+                            gameOver = true;
+                            overlayText.innerText = "💀 GAME OVER 💀";
+                            overlayBtn.innerText = "🔄 Play Again";
+                            overlay.classList.remove('hidden');
+                        } else {
+                            // Instant Soft Reset
+                            pacman.x = 7; pacman.y = 8;
+                            pacman.gridX = 7; pacman.gridY = 8;
+                            pacman.dirX = 0; pacman.dirY = 0;
+                            pacman.nextDirX = 0; pacman.nextDirY = 0;
+                            pacman.angle = 0;
+                            initGhosts();
+                        }
+                    }
+                }
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw Arcade background color
+            ctx.fillStyle = '#070a13';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Maze Map Walls and Dots
+            for (let r = 0; r < MAP.length; r++) {
+                for (let c = 0; c < MAP[r].length; c++) {
+                    if (MAP[r][c] === 1) {
+                        ctx.fillStyle = '#1e3a8a';
+                        ctx.fillRect(c * TILE_SIZE + 2, r * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+                    } else if (dots[r][c] === 2) {
+                        ctx.fillStyle = '#FFE135';
+                        ctx.beginPath();
+                        ctx.arc(c * TILE_SIZE + TILE_SIZE/2, r * TILE_SIZE + TILE_SIZE/2, 3.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (dots[r][c] === 3) {
+                        if (Math.floor(Date.now() / 220) % 2 === 0) {
+                            ctx.fillStyle = '#f43f5e';
+                            ctx.beginPath();
+                            ctx.arc(c * TILE_SIZE + TILE_SIZE/2, r * TILE_SIZE + TILE_SIZE/2, 7.5, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+                }
+            }
+
+            // --- DRAW MS. PAC-MAN ROTATING DYNAMICALLY ---
+            const px = pacman.x * TILE_SIZE + TILE_SIZE/2;
+            const py = pacman.y * TILE_SIZE + TILE_SIZE/2;
+            const mouthAngle = Math.sin(gameTick * 0.25) * 0.2 + 0.25;
+
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.rotate(pacman.angle);
+
+            // Body
+            ctx.fillStyle = '#FFEB3B';
+            ctx.beginPath();
+            ctx.arc(0, 0, TILE_SIZE/2 - 2, mouthAngle, (2 * Math.PI) - mouthAngle);
+            ctx.lineTo(0, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            // Eye (placed symmetrically using rotation context)
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(0, -6, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Makeup/Blush cheek
+            ctx.fillStyle = '#FF4081';
+            ctx.beginPath();
+            ctx.arc(-4, 4, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ms. Pac-Man's beautiful Bow!
+            ctx.fillStyle = '#FF4081';
+            ctx.beginPath();
+            ctx.moveTo(-10, -14);
+            ctx.lineTo(-2, -10);
+            ctx.lineTo(-10, -6);
+            ctx.closePath();
+            ctx.moveTo(2, -14);
+            ctx.lineTo(-6, -10);
+            ctx.lineTo(2, -6);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+
+            // --- DRAW GHOSTS ---
+            ghosts.forEach((ghost) => {
+                const gx = ghost.x * TILE_SIZE + TILE_SIZE/2;
+                const gy = ghost.y * TILE_SIZE + TILE_SIZE/2;
+                
+                let finalColor = ghost.color;
+                if (frightenedTimer > 0) {
+                    if (frightenedTimer < 60 && Math.floor(frightenedTimer / 8) % 2 === 0) {
+                        finalColor = '#ffffff';
+                    } else {
+                        finalColor = '#3b82f6';
+                    }
+                }
+
+                ctx.fillStyle = finalColor;
+                ctx.beginPath();
+                ctx.arc(gx, gy - 2, TILE_SIZE/2 - 4, Math.PI, 0, false);
+                ctx.lineTo(gx + TILE_SIZE/2 - 4, gy + TILE_SIZE/2 - 4);
+                ctx.lineTo(gx + TILE_SIZE/4, gy + TILE_SIZE/4);
+                ctx.lineTo(gx, gy + TILE_SIZE/2 - 4);
+                ctx.lineTo(gx - TILE_SIZE/4, gy + TILE_SIZE/4);
+                ctx.lineTo(gx - TILE_SIZE/2 + 4, gy + TILE_SIZE/2 - 4);
+                ctx.closePath();
+                ctx.fill();
+
+                if (frightenedTimer === 0) {
+                    ctx.fillStyle = '#FFF';
+                    ctx.beginPath();
+                    ctx.arc(gx - 4, gy - 4, 3, 0, Math.PI * 2);
+                    ctx.arc(gx + 4, gy - 4, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#00F';
+                    ctx.beginPath();
+                    ctx.arc(gx - 3, gy - 4, 1.5, 0, Math.PI * 2);
+                    ctx.arc(gx + 5, gy - 4, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.strokeStyle = '#ffeb3b';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.arc(gx - 4, gy - 3, 2, Math.PI, 0, false);
+                    ctx.arc(gx + 4, gy - 3, 2, Math.PI, 0, false);
+                    ctx.stroke();
+                }
+            });
+        }
+
+        function gameLoop() {
+            if (gameOver || gameWon) return;
+            updateGame();
+            draw();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function handleOverlayAction() {
+            if (gameWon) {
+                restartGame(false); // Carry over level and score on clear!
+            } else {
+                restartGame(true);  // Reset completely on death
+            }
+        }
+
+        function restartGame(fullReset = true) {
+            dots = JSON.parse(JSON.stringify(MAP));
+            if (fullReset) {
+                score = 0;
+                scoreVal.innerText = score;
+                lives = 3;
+                level = 1;
+            }
+            pacman = { 
+                x: 7, y: 8, 
+                gridX: 7, gridY: 8, 
+                dirX: 0, dirY: 0, 
+                nextDirX: 0, nextDirY: 0, 
+                angle: 0 
+            };
+            initGhosts();
+            updateLivesDisplay();
+            updateLevelDisplay();
+            gameOver = false;
+            gameWon = false;
+            frightenedTimer = 0;
+            frightenedBox.classList.add('hidden');
+            overlay.classList.add('hidden');
+            cancelAnimationFrame(animationFrameId);
+            playSound('start');
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        initGhosts();
+        updateLivesDisplay();
+        updateLevelDisplay();
+        animationFrameId = requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
